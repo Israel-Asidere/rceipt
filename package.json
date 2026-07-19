@@ -4,6 +4,9 @@
   "version": "1.0.0",
   "dependencies": {
     "@expo/ui": "~56.0.18",
+    "@expo/vector-icons": "^15.0.2",
+    "@react-native-vector-icons/ionicons": "^13.1.2",
+    "@react-navigation/drawer": "^7.12.3",
     "expo": "~56.0.12",
     "expo-constants": "~56.0.18",
     "expo-device": "~56.0.4",
