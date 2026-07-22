@@ -2,9 +2,11 @@ import { StyleSheet } from 'react-native';
 
 export const colors = {
   background: 'rgba(18, 86, 0, .9)',
+  backgroundLight: '#495A44',
   header: '#0F4800',
   surface: '#2a2a4a',
   primary: '#E7FFB5',
+  buttonPrimary: '#256B12',
   text: '#ffffff',
   textTetiary: '#256B12',
   textSecondary: '#E0E0E0',
