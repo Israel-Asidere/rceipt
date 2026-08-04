@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { FlatList, StyleSheet, Text, View } from "react-native";
+import { FlatList, Modal, StyleSheet, Text, View } from "react-native";
+import HamburgerMenuContent from "../components/HamburgerMenuContent";
 import ReceiptCard from "../components/ReceiptCard";
 import TopAppBar from "../components/TopAppBar";
 import { globalStyles } from "../styles/global";
@@ -26,9 +27,10 @@ const MOCK_RECEIPTS = [
   { id: '19', name: 'Receipt Name', date: '12/06/2022', thumbnailUri: null },
   { id: '20', name: 'Receipt Name', date: '12/06/2022', thumbnailUri: null },
 ];
-  
+
 export default function Index() {
   const [searchQuery, setSearchQuery] = useState('');
+  const [menuVisible, setMenuVisible] = useState(false);
 
   // useMemo avoids re-filtering the full list on every unrelated re-render —
   // only recomputes when the query or the underlying data changes.
@@ -38,12 +40,13 @@ export default function Index() {
     return MOCK_RECEIPTS.filter((r) => r.name.toLowerCase().includes(q));
   }, [searchQuery]);
 
-  
   return (
     <View style={styles.container}>
-      <TopAppBar searchValue={searchQuery}
+      <TopAppBar
+        searchValue={searchQuery}
         onChangeSearch={setSearchQuery}
-        onMenuPress={() => navigation?.openDrawer?.()}/>
+        onMenuPress={() => setMenuVisible(true)}
+      />
       <View style={globalStyles.header} >
         <View style={styles.receiptContainer}>
          <FlatList
@@ -60,13 +63,24 @@ export default function Index() {
         renderItem={({ item }) => (
           <ReceiptCard
             receipt={item}
-            onPress={() => navigation?.navigate?.('ReceiptDetail', { id: item.id })}
+            // TODO: wire this to a real receipt-detail route once one
+            // exists — router.push(`/receipt/${item.id}`) or similar.
+            // Left as a no-op stub rather than a broken navigation call.
+            onPress={() => console.log('Open receipt', item.id)}
           />
         )}
       />
         </View>
         </View>
-      </View>
+
+      <Modal
+        visible={menuVisible}
+        animationType="fade"
+        onRequestClose={() => setMenuVisible(false)}
+      >
+        <HamburgerMenuContent onClose={() => setMenuVisible(false)} />
+      </Modal>
+    </View>
   );
 }
 
