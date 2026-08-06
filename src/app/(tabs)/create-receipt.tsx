@@ -14,7 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { colors } from '../styles/global';
+import { colors, globalStyles } from '../styles/global';
 
 function makeId() {
   return Math.random().toString(36).slice(2, 10);
@@ -344,8 +344,8 @@ export default function CreateReceiptScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backRow}>
+      <View style={globalStyles.backRowHeader}>
+        <TouchableOpacity onPress={() => router.back()} style={globalStyles.backRow}>
           <Ionicons name="chevron-back" size={22} color="#fff" />
           <Text style={styles.backText}>Back Home</Text>
         </TouchableOpacity>
@@ -520,13 +520,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.backgroundSecondary },
   content: { paddingBottom: 40 },
 
-  header: {
-    backgroundColor: colors.headerSecondary,
-    paddingTop: 80,
-    paddingHorizontal: 16,
-    paddingBottom: 35,
-  },
-  backRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  
   backText: { fontSize: 16, color: '#fff' },
 
   body: { padding: 16 },

@@ -13,9 +13,11 @@ export const colors = {
   textPrimary: '#125600',
   buttonPrimary: '#256B12',
   text: '#ffffff',
+  blackText: '#000000',
   textTetiary: '#256B12',
   textSecondary: '#E0E0E0',
   alert: '#ff5252',
+  hamburgerBG: '#495A44',
 };
 
 export const globalStyles = StyleSheet.create({
@@ -41,4 +43,11 @@ export const globalStyles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
+  backRowHeader: {
+    backgroundColor: colors.headerSecondary,
+    paddingTop: 80,
+    paddingHorizontal: 16,
+    paddingBottom: 35,
+  },
+  backRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
 });
