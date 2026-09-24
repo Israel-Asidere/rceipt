@@ -104,20 +104,45 @@ function SelectField({
 }
 
 export default function CreateReceiptScreen() {
-  const { addReceipt } = useReceipts();
-  const params = useLocalSearchParams<{ photoUri?: string }>();
-  const receiptPhotoUri = typeof params.photoUri === 'string' ? params.photoUri : undefined;
+  const { addReceipt, updateReceipt, receipts } = useReceipts();
+  const params = useLocalSearchParams<{ photoUri?: string; editId?: string }>();
+  const scanPhotoUri = typeof params.photoUri === 'string' ? params.photoUri : undefined;
+  const editId = typeof params.editId === 'string' ? params.editId : undefined;
 
-  const [date, setDate] = useState<Date>(() => new Date());
-  const [customerName, setCustomerName] = useState('');
-  const [customerEmail, setCustomerEmail] = useState('');
-  const [shipToOption, setShipToOption] = useState('');
-  const [shipToAddress, setShipToAddress] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('');
+  // When reached with an editId (from the Edit button on the detail or
+  // confirmation screen), this is the receipt being edited rather than
+  // created fresh. Looked up from the shared context rather than passed
+  // as a param, so it's always current data.
+  const existingReceipt = editId ? receipts.find((r) => r.id === editId) : undefined;
+  const isEditMode = !!existingReceipt;
 
-  const [items, setItems] = useState<ReceiptItem[]>([
-    { id: makeId(), name: '', qty: '', unitPrice: '', description: '', imageUri: null },
-  ]);
+  const [receiptPhotoUri, setReceiptPhotoUri] = useState<string | undefined>(
+    () => scanPhotoUri ?? existingReceipt?.thumbnailUri ?? undefined
+  );
+
+  const [date, setDate] = useState<Date>(() =>
+    existingReceipt ? new Date(existingReceipt.date) : new Date()
+  );
+  const [customerName, setCustomerName] = useState(() => existingReceipt?.name ?? '');
+  const [customerEmail, setCustomerEmail] = useState(() => existingReceipt?.customerEmail ?? '');
+  // shipTo is stored on the receipt as a single resolved string (either
+  // "Pickup In Store" or the actual typed address) — reconstruct which
+  // picker option that implies so the form re-opens showing the right
+  // state instead of always defaulting to unset.
+  const [shipToOption, setShipToOption] = useState(() => {
+    if (!existingReceipt || !existingReceipt.shipTo) return '';
+    return existingReceipt.shipTo === 'Pickup In Store' ? 'Pickup In Store' : 'Enter Address';
+  });
+  const [shipToAddress, setShipToAddress] = useState(() =>
+    existingReceipt && existingReceipt.shipTo !== 'Pickup In Store' ? existingReceipt.shipTo : ''
+  );
+  const [paymentMethod, setPaymentMethod] = useState(() => existingReceipt?.paymentMethod ?? '');
+
+  const [items, setItems] = useState<ReceiptItem[]>(() =>
+    existingReceipt && existingReceipt.items.length > 0
+      ? existingReceipt.items
+      : [{ id: makeId(), name: '', qty: '', unitPrice: '', description: '', imageUri: null }]
+  );
   const [itemsExpanded, setItemsExpanded] = useState(true);
 
   const updateItem = (id: string, field: keyof ReceiptItem, value: string) => {
@@ -176,7 +201,28 @@ export default function CreateReceiptScreen() {
 
     // Field names here (`name`, `thumbnailUri`) match what ReceiptCard on
     // Home expects directly — no separate mapping step needed between
-    // "what create-receipt collects" and "what the grid displays".
+    // "what this form collects" and "what the grid displays".
+    if (isEditMode && existingReceipt) {
+      await updateReceipt(existingReceipt.id, {
+        id: existingReceipt.id,
+        name: customerName.trim(),
+        date: date.toISOString(),
+        thumbnailUri: receiptPhotoUri ?? null,
+        customerEmail: customerEmail.trim(),
+        shipTo,
+        paymentMethod,
+        taxPercent: TAX_PERCENT,
+        total,
+        items: validItems,
+      });
+      // No "just saved!" confirmation screen for edits — that celebratory
+      // badge is specifically a one-time "you just created this" moment
+      // (see receipt-created/[id].tsx). An edit goes straight back to the
+      // regular detail view, now showing the updated data.
+      router.replace(`/receipt/${existingReceipt.id}`);
+      return;
+    }
+
     const newReceiptId = makeId();
     await addReceipt({
       id: newReceiptId,
@@ -204,7 +250,7 @@ export default function CreateReceiptScreen() {
       </View>
 
       <View style={styles.body}>
-        <Text style={styles.title}>Create Receipt</Text>
+        <Text style={styles.title}>{isEditMode ? 'Edit Receipt' : 'Create Receipt'}</Text>
 
         {receiptPhotoUri && (
           <Image source={{ uri: receiptPhotoUri }} style={styles.receiptPhoto} resizeMode="cover" />
@@ -364,7 +410,7 @@ export default function CreateReceiptScreen() {
         </View>
 
         <TouchableOpacity style={styles.createButton} onPress={handleSave}>
-          <Text style={styles.createButtonText}>CREATE</Text>
+          <Text style={styles.createButtonText}>{isEditMode ? 'SAVE CHANGES' : 'CREATE'}</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>

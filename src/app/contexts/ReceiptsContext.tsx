@@ -29,6 +29,7 @@ interface ReceiptsContextValue {
   receipts: Receipt[];
   isLoading: boolean;
   addReceipt: (receipt: Receipt) => Promise<void>;
+  updateReceipt: (id: string, receipt: Receipt) => Promise<void>;
   deleteReceipt: (id: string) => Promise<void>;
 }
 
@@ -79,6 +80,16 @@ export function ReceiptsProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const updateReceipt = async (id: string, updatedReceipt: Receipt) => {
+    const updated = receipts.map((receipt) => (receipt.id === id ? updatedReceipt : receipt));
+    setReceipts(updated);
+    try {
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    } catch (error) {
+      console.error('Failed to update receipt in storage:', error);
+    }
+  };
+
   const deleteReceipt = async (id: string) => {
     const updated = receipts.filter((receipt) => receipt.id !== id);
     setReceipts(updated);
@@ -90,7 +101,7 @@ export function ReceiptsProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <ReceiptsContext.Provider value={{ receipts, isLoading, addReceipt, deleteReceipt }}>
+    <ReceiptsContext.Provider value={{ receipts, isLoading, addReceipt, updateReceipt, deleteReceipt }}>
       {children}
     </ReceiptsContext.Provider>
   );

@@ -74,10 +74,7 @@ export default function ReceiptCreatedScreen() {
   };
 
   const handleEdit = () => {
-    // TODO: no edit flow exists yet — reusing create-receipt's form for
-    // editing (pre-filled, with a create/update mode) is its own piece
-    // of work, not yet built.
-    Alert.alert('Coming soon', "Editing a receipt isn't built yet.");
+    router.push({ pathname: '/create-receipt', params: { editId: receipt.id } });
   };
 
   return (
