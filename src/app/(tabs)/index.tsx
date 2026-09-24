@@ -1,44 +1,31 @@
+import { router } from "expo-router";
 import { useMemo, useState } from "react";
 import { FlatList, Modal, StyleSheet, Text, View } from "react-native";
 import HamburgerMenuContent from "../components/HamburgerMenuContent";
 import ReceiptCard from "../components/ReceiptCard";
 import TopAppBar from "../components/TopAppBar";
+import { useReceipts } from "../contexts/ReceiptsContext";
 import { globalStyles } from "../styles/global";
 
-const MOCK_RECEIPTS = [
-  { id: '1', name: 'Receipt Name', date: '12/06/2022', thumbnailUri: null },
-  { id: '2', name: 'Receipt Name', date: '12/06/2022', thumbnailUri: null },
-  { id: '3', name: 'Receipt Name', date: '12/06/2022', thumbnailUri: null },
-  { id: '4', name: 'Receipt Name', date: '12/06/2022', thumbnailUri: null },
-  { id: '5', name: 'Receipt Name', date: '12/06/2022', thumbnailUri: null },
-  { id: '6', name: 'Receipt Name', date: '12/06/2022', thumbnailUri: null },
-  { id: '7', name: 'Receipt Name', date: '12/06/2022', thumbnailUri: null },
-  { id: '8', name: 'Receipt Name', date: '12/06/2022', thumbnailUri: null },
-  { id: '9', name: 'Receipt Name', date: '12/06/2022', thumbnailUri: null },
-  { id: '10', name: 'Receipt Name', date: '12/06/2022', thumbnailUri: null },
-   {id: '11', name: 'Receipt Name', date: '12/06/2022', thumbnailUri: null },
-  { id: '12', name: 'Receipt Name', date: '12/06/2022', thumbnailUri: null },
-  { id: '13', name: 'Receipt Name', date: '12/06/2022', thumbnailUri: null },
-  { id: '14', name: 'Receipt Name', date: '12/06/2022', thumbnailUri: null },
-  { id: '15', name: 'Receipt Name', date: '12/06/2022', thumbnailUri: null },
-  { id: '16', name: 'Receipt Name', date: '12/06/2022', thumbnailUri: null },
-  { id: '17', name: 'Receipt Name', date: '12/06/2022', thumbnailUri: null },
-  { id: '18', name: 'Receipt Name', date: '12/06/2022', thumbnailUri: null },
-  { id: '19', name: 'Receipt Name', date: '12/06/2022', thumbnailUri: null },
-  { id: '20', name: 'Receipt Name', date: '12/06/2022', thumbnailUri: null },
-];
-
 export default function Index() {
+  const { receipts, isLoading } = useReceipts();
   const [searchQuery, setSearchQuery] = useState('');
   const [menuVisible, setMenuVisible] = useState(false);
 
   // useMemo avoids re-filtering the full list on every unrelated re-render —
   // only recomputes when the query or the underlying data changes.
   const filteredReceipts = useMemo(() => {
-    if (!searchQuery.trim()) return MOCK_RECEIPTS;
+    if (!searchQuery.trim()) return receipts;
     const q = searchQuery.trim().toLowerCase();
-    return MOCK_RECEIPTS.filter((r) => r.name.toLowerCase().includes(q));
-  }, [searchQuery]);
+    return receipts.filter((r) => r.name.toLowerCase().includes(q));
+  }, [searchQuery, receipts]);
+
+  // Two different empty states: "you haven't created any receipts yet"
+  // vs "none of your receipts match this search" — worth telling apart
+  // so a new user isn't shown a message that reads like a search result.
+  const emptyMessage = searchQuery.trim()
+    ? `No receipts match "${searchQuery}"`
+    : 'No receipts yet — create your first one to see it here.';
 
   return (
     <View style={styles.container}>
@@ -58,15 +45,12 @@ export default function Index() {
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={<Text style={styles.sectionTitle}>Recent Receipts</Text>}
         ListEmptyComponent={
-          <Text style={styles.emptyText}>No receipts match "{searchQuery}"</Text>
+          isLoading ? null : <Text style={styles.emptyText}>{emptyMessage}</Text>
         }
         renderItem={({ item }) => (
           <ReceiptCard
             receipt={item}
-            // TODO: wire this to a real receipt-detail route once one
-            // exists — router.push(`/receipt/${item.id}`) or similar.
-            // Left as a no-op stub rather than a broken navigation call.
-            onPress={() => console.log('Open receipt', item.id)}
+            onPress={() => router.push(`/receipt/${item.id}`)}
           />
         )}
       />

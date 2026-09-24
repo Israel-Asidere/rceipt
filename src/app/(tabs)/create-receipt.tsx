@@ -10,27 +10,28 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import DatePickerField from '../components/DatePickerField';
+import FormInput from '../components/FormInput';
+import { useReceipts } from '../contexts/ReceiptsContext';
 import { colors, globalStyles } from '../styles/global';
+import { formatCurrency } from '../utils/formatCurrency';
 
 function makeId() {
   return Math.random().toString(36).slice(2, 10);
 }
 
-// ---- Colors specific to this screen's active/idle states ----
-// These aren't in styles/global.ts yet. If colors.primary already IS
-// this exact green, ACTIVE can just become an alias for it — kept
-// separate for now since the header green in the mock reads slightly
-// darker than the button/active-field green.
-const ACTIVE = '#4C7A3B'; // focused border/text, filled-value text, CREATE button
+const ACTIVE = '#4C7A3B';
 const ADD_ITEM_BLUE = '#3F51B5';
 const DONE_BG = '#C8E6C9';
-const CALENDAR_BG = '#4D4D4D';
-const CALENDAR_CHIP_BG = '#666666';
-const CALENDAR_CHIP_FADED_TEXT = '#9E9E9E';
+
+// Fixed VAT rate — no longer user-editable, so this is a plain constant
+// rather than state. If this ever needs to vary (e.g. per business, or
+// per region), it becomes a real input again; until then a constant is
+// simpler and can't accidentally be typed into something invalid.
+const TAX_PERCENT = 7.5;
 
 interface ReceiptItem {
   id: string;
@@ -41,66 +42,15 @@ interface ReceiptItem {
   imageUri: string | null;
 }
 
-const SHIP_TO_OPTIONS = ['Home Address', 'Work Address', 'Pickup In Store'];
+const SHIP_TO_OPTIONS = ['Enter Address', 'Pickup In Store'];
 const PAYMENT_METHOD_OPTIONS = ['Cash', 'Card', 'Bank Transfer', 'Mobile Money'];
-
-function FormInput({
-  label,
-  required,
-  value,
-  onChangeText,
-  keyboardType,
-  multiline,
-}: {
-  label: string;
-  required?: boolean;
-  value: string;
-  onChangeText: (text: string) => void;
-  keyboardType?: 'default' | 'email-address' | 'decimal-pad' | 'number-pad';
-  multiline?: boolean;
-}) {
-  const [focused, setFocused] = useState(false);
-  const hasValue = value.trim().length > 0;
-  const isActive = focused || hasValue;
-  const showOverlayLabel = !focused && !hasValue;
-
-  return (
-    <View style={styles.fieldWrapper}>
-      {showOverlayLabel && (
-        <View style={styles.overlayLabelRow} pointerEvents="none">
-          <Text style={styles.overlayLabelText}>{label}</Text>
-          {required && <Text style={styles.requiredAsterisk}>*</Text>}
-        </View>
-      )}
-      <TextInput
-        style={[
-          styles.input,
-          multiline && styles.inputMultiline,
-          {
-            borderColor: isActive ? ACTIVE : colors.surface,
-            borderWidth: focused ? 2 : 1,
-            color: isActive ? ACTIVE : colors.textPrimary,
-          },
-        ]}
-        value={value}
-        onChangeText={onChangeText}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
-        placeholder={focused && !hasValue ? label : ''}
-        placeholderTextColor={ACTIVE}
-        keyboardType={keyboardType}
-        multiline={multiline}
-      />
-    </View>
-  );
-}
 
 /**
  * SelectField
  * -----------
- * Ship To / Payment Method dropdowns. Same idle-vs-active color rule as
- * FormInput, just driven by "has a selection" instead of focus (there's
- * no keyboard focus on a button).
+ * Ship To / Payment Method dropdowns. Kept inline here (not extracted)
+ * since it's identical between both versions being merged — no reason
+ * to touch it.
  */
 function SelectField({
   label,
@@ -119,11 +69,11 @@ function SelectField({
   return (
     <>
       <TouchableOpacity
-        style={[styles.input, styles.selectInput, { borderColor: isActive ? ACTIVE : colors.surface }]}
+        style={[styles.input, styles.selectInput, { borderColor: isActive ? ACTIVE : colors.textPrimary }]}
         onPress={() => setOpen(true)}
       >
-        <Text style={{ fontSize: 15, color: isActive ? ACTIVE : colors.text }}>{value || label}</Text>
-        <Ionicons name="chevron-down" size={18} color={isActive ? ACTIVE : colors.textSecondary} />
+        <Text style={{ fontSize: 15, color: isActive ? ACTIVE : colors.textPrimary }}>{value || label}</Text>
+        <Ionicons name="chevron-down" size={18} color={isActive ? ACTIVE : colors.textPrimary} />
       </TouchableOpacity>
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
@@ -153,131 +103,46 @@ function SelectField({
   );
 }
 
-
-
-const WEEKDAY_LABELS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
-
-interface CalendarDay {
-  date: Date;
-  inCurrentMonth: boolean;
-}
-
-function getCalendarDays(viewDate: Date): CalendarDay[] {
-  const year = viewDate.getFullYear();
-  const month = viewDate.getMonth();
-  const firstOfMonth = new Date(year, month, 1);
-  // getDay() is 0=Sun..6=Sat; shift so 0=Mon..6=Sun to match the Mo-Su header.
-  const firstWeekday = (firstOfMonth.getDay() + 6) % 7;
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const daysInPrevMonth = new Date(year, month, 0).getDate();
-
-  const days: CalendarDay[] = [];
-  for (let i = firstWeekday - 1; i >= 0; i--) {
-    days.push({ date: new Date(year, month - 1, daysInPrevMonth - i), inCurrentMonth: false });
-  }
-  for (let d = 1; d <= daysInMonth; d++) {
-    days.push({ date: new Date(year, month, d), inCurrentMonth: true });
-  }
-  let nextDay = 1;
-  while (days.length % 7 !== 0) {
-    days.push({ date: new Date(year, month + 1, nextDay), inCurrentMonth: false });
-    nextDay += 1;
-  }
-  return days;
-}
-
-function isSameDay(a: Date, b: Date) {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-}
-
-function CalendarPicker({
-  selectedDate,
-  onSelect,
-}: {
-  selectedDate: Date;
-  onSelect: (date: Date) => void;
-}) {
-  const [viewDate, setViewDate] = useState(selectedDate);
-  const days = getCalendarDays(viewDate);
-  const weeks: CalendarDay[][] = [];
-  for (let i = 0; i < days.length; i += 7) {
-    weeks.push(days.slice(i, i + 7));
-  }
-
-  const goToPrevMonth = () => setViewDate((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
-  const goToNextMonth = () => setViewDate((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
-
-  return (
-    <View style={styles.calendarCard}>
-      <View style={styles.calendarHeader}>
-        <TouchableOpacity onPress={goToPrevMonth} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Ionicons name="chevron-back" size={16} color="#fff" />
-        </TouchableOpacity>
-        <Text style={styles.calendarHeaderText}>
-          {viewDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
-        </Text>
-        <TouchableOpacity onPress={goToNextMonth} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Ionicons name="chevron-forward" size={16} color="#fff" />
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.calendarWeekRow}>
-        {WEEKDAY_LABELS.map((label) => (
-          <Text key={label} style={styles.calendarWeekLabel}>
-            {label}
-          </Text>
-        ))}
-      </View>
-
-      {weeks.map((week, weekIndex) => (
-        <View key={weekIndex} style={styles.calendarWeekRow}>
-          {week.map((day) => {
-            const selected = isSameDay(day.date, selectedDate);
-            return (
-              <TouchableOpacity
-                key={day.date.toISOString()}
-                style={[styles.calendarDayChip, selected && styles.calendarDayChipSelected]}
-                onPress={() => onSelect(day.date)}
-              >
-                <Text
-                  style={[
-                    styles.calendarDayText,
-                    !day.inCurrentMonth && styles.calendarDayTextFaded,
-                    selected && styles.calendarDayTextSelected,
-                  ]}
-                >
-                  {day.date.getDate()}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      ))}
-    </View>
-  );
-}
-
 export default function CreateReceiptScreen() {
-  const params = useLocalSearchParams<{ photoUri?: string }>();
-  const receiptPhotoUri = typeof params.photoUri === 'string' ? params.photoUri : undefined;
+  const { addReceipt, updateReceipt, receipts } = useReceipts();
+  const params = useLocalSearchParams<{ photoUri?: string; editId?: string }>();
+  const scanPhotoUri = typeof params.photoUri === 'string' ? params.photoUri : undefined;
+  const editId = typeof params.editId === 'string' ? params.editId : undefined;
 
-  const [date, setDate] = useState(() => new Date());
-  const [showCalendar, setShowCalendar] = useState(false);
-  const formattedDate = date.toLocaleDateString(undefined, {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
+  // When reached with an editId (from the Edit button on the detail or
+  // confirmation screen), this is the receipt being edited rather than
+  // created fresh. Looked up from the shared context rather than passed
+  // as a param, so it's always current data.
+  const existingReceipt = editId ? receipts.find((r) => r.id === editId) : undefined;
+  const isEditMode = !!existingReceipt;
+
+  const [receiptPhotoUri, setReceiptPhotoUri] = useState<string | undefined>(
+    () => scanPhotoUri ?? existingReceipt?.thumbnailUri ?? undefined
+  );
+
+  const [date, setDate] = useState<Date>(() =>
+    existingReceipt ? new Date(existingReceipt.date) : new Date()
+  );
+  const [customerName, setCustomerName] = useState(() => existingReceipt?.name ?? '');
+  const [customerEmail, setCustomerEmail] = useState(() => existingReceipt?.customerEmail ?? '');
+  // shipTo is stored on the receipt as a single resolved string (either
+  // "Pickup In Store" or the actual typed address) — reconstruct which
+  // picker option that implies so the form re-opens showing the right
+  // state instead of always defaulting to unset.
+  const [shipToOption, setShipToOption] = useState(() => {
+    if (!existingReceipt || !existingReceipt.shipTo) return '';
+    return existingReceipt.shipTo === 'Pickup In Store' ? 'Pickup In Store' : 'Enter Address';
   });
+  const [shipToAddress, setShipToAddress] = useState(() =>
+    existingReceipt && existingReceipt.shipTo !== 'Pickup In Store' ? existingReceipt.shipTo : ''
+  );
+  const [paymentMethod, setPaymentMethod] = useState(() => existingReceipt?.paymentMethod ?? '');
 
-  const [customerName, setCustomerName] = useState('');
-  const [customerEmail, setCustomerEmail] = useState('');
-  const [shipTo, setShipTo] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('');
-  const [taxPercent, setTaxPercent] = useState('');
-
-  const [items, setItems] = useState<ReceiptItem[]>([
-    { id: makeId(), name: '', qty: '', unitPrice: '', description: '', imageUri: null },
-  ]);
+  const [items, setItems] = useState<ReceiptItem[]>(() =>
+    existingReceipt && existingReceipt.items.length > 0
+      ? existingReceipt.items
+      : [{ id: makeId(), name: '', qty: '', unitPrice: '', description: '', imageUri: null }]
+  );
   const [itemsExpanded, setItemsExpanded] = useState(true);
 
   const updateItem = (id: string, field: keyof ReceiptItem, value: string) => {
@@ -309,11 +174,11 @@ export default function CreateReceiptScreen() {
     const price = parseFloat(item.unitPrice) || 0;
     return sum + qty * price;
   }, 0);
-  const taxAmount = subtotal * ((parseFloat(taxPercent) || 0) / 100);
+  const taxAmount = subtotal * (TAX_PERCENT / 100);
   const total = subtotal + taxAmount;
-  const formattedTotal = total.toLocaleString('en-NG');
+  const formattedTotal = formatCurrency(total);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!customerName.trim()) {
       Alert.alert('Missing name', 'Enter a customer name before saving.');
       return;
@@ -323,23 +188,56 @@ export default function CreateReceiptScreen() {
       Alert.alert('No items', 'Add at least one item before saving.');
       return;
     }
+    if (shipToOption === 'Enter Address' && !shipToAddress.trim()) {
+      Alert.alert('Missing address', 'Enter the shipping address, or choose Pickup In Store instead.');
+      return;
+    }
 
-    const newReceipt = {
-      id: makeId(),
+    // Resolve what actually gets saved: the typed address if that option
+    // was chosen, otherwise the option itself ("Pickup In Store"). Never
+    // save the literal words "Enter Address" — that's just the picker
+    // label, not a real shipping destination.
+    const shipTo = shipToOption === 'Enter Address' ? shipToAddress.trim() : shipToOption;
+
+    // Field names here (`name`, `thumbnailUri`) match what ReceiptCard on
+    // Home expects directly — no separate mapping step needed between
+    // "what this form collects" and "what the grid displays".
+    if (isEditMode && existingReceipt) {
+      await updateReceipt(existingReceipt.id, {
+        id: existingReceipt.id,
+        name: customerName.trim(),
+        date: date.toISOString(),
+        thumbnailUri: receiptPhotoUri ?? null,
+        customerEmail: customerEmail.trim(),
+        shipTo,
+        paymentMethod,
+        taxPercent: TAX_PERCENT,
+        total,
+        items: validItems,
+      });
+      // No "just saved!" confirmation screen for edits — that celebratory
+      // badge is specifically a one-time "you just created this" moment
+      // (see receipt-created/[id].tsx). An edit goes straight back to the
+      // regular detail view, now showing the updated data.
+      router.replace(`/receipt/${existingReceipt.id}`);
+      return;
+    }
+
+    const newReceiptId = makeId();
+    await addReceipt({
+      id: newReceiptId,
+      name: customerName.trim(),
       date: date.toISOString(),
-      customerName: customerName.trim(),
+      thumbnailUri: receiptPhotoUri ?? null,
       customerEmail: customerEmail.trim(),
       shipTo,
       paymentMethod,
-      taxPercent: parseFloat(taxPercent) || 0,
+      taxPercent: TAX_PERCENT,
       total,
-      receiptPhotoUri: receiptPhotoUri ?? null,
       items: validItems,
-    };
+    });
 
-    // TODO: replace with real persistence once that layer exists.
-    console.log('New receipt (wire this up to real storage):', newReceipt);
-    router.replace('/');
+    router.replace(`/receipt-created/${newReceiptId}`);
   };
 
   return (
@@ -352,39 +250,21 @@ export default function CreateReceiptScreen() {
       </View>
 
       <View style={styles.body}>
-        <Text style={styles.title}>Create Receipt</Text>
+        <Text style={styles.title}>{isEditMode ? 'Edit Receipt' : 'Create Receipt'}</Text>
 
         {receiptPhotoUri && (
           <Image source={{ uri: receiptPhotoUri }} style={styles.receiptPhoto} resizeMode="cover" />
         )}
 
         <View style={styles.row}>
-          <View style={[styles.rowInputSmall, { position: 'relative', zIndex: 20 }]}>
-            <TouchableOpacity
-              style={[styles.input, styles.selectInput, { borderColor: ACTIVE }]}
-              onPress={() => setShowCalendar((prev) => !prev)}
-            >
-              <Text style={{ fontSize: 15, color: ACTIVE }}>{formattedDate}</Text>
-              <Ionicons
-                name={showCalendar ? 'chevron-up' : 'chevron-down'}
-                size={16}
-                color={ACTIVE}
-              />
-            </TouchableOpacity>
-
-            {showCalendar && (
-              <View style={styles.calendarDropdown}>
-                <CalendarPicker
-                  selectedDate={date}
-                  onSelect={(selected) => {
-                    setDate(selected);
-                    setShowCalendar(false);
-                  }}
-                />
-              </View>
-            )}
+          <View style={[styles.rowInputSmall, { zIndex: 20 }]}>
+            <DatePickerField
+              label="Date"
+              value={date}
+              onChange={setDate}
+              dropdownWidth={320}
+            />
           </View>
-
           <View style={styles.rowInputLarge}>
             <FormInput label="Customer Name" value={customerName} onChangeText={setCustomerName} />
           </View>
@@ -399,10 +279,7 @@ export default function CreateReceiptScreen() {
 
         {/* ---- Item Details accordion ---- */}
         <TouchableOpacity
-          style={[
-            styles.sectionHeader,
-            { borderColor: itemsExpanded ? ACTIVE : colors.surface },
-          ]}
+          style={[styles.sectionHeader, { borderColor: itemsExpanded ? ACTIVE : colors.surface }]}
           onPress={() => setItemsExpanded((prev) => !prev)}
         >
           <Text style={[styles.sectionHeaderText, { color: colors.textPrimary }]}>
@@ -426,24 +303,38 @@ export default function CreateReceiptScreen() {
                     disabled={items.length === 1}
                     style={styles.itemRemoveButton}
                   >
-                    {items.length > 1 ?
-                    <Ionicons
-                      name="close-circle-outline"
-                      size={20}
-                      color={items.length === 1 ? colors.surface : colors.alert}
-                    /> : null}
+                    {items.length > 1 ? (
+                      <Ionicons name="close-circle-outline" size={20} color={colors.alert} />
+                    ) : null}
                   </TouchableOpacity>
                 </View>
 
                 <View style={styles.itemRow}>
                   <View style={styles.itemNameInput}>
-                    <FormInput label="Item Name" required value={item.name} onChangeText={(t) => updateItem(item.id, 'name', t)} />
+                    <FormInput
+                      label="Item Name"
+                      required
+                      value={item.name}
+                      onChangeText={(t) => updateItem(item.id, 'name', t)}
+                    />
                   </View>
                   <View style={styles.itemQtyInput}>
-                    <FormInput label="Qty" required value={item.qty} onChangeText={(t) => updateItem(item.id, 'qty', t)} keyboardType="number-pad" />
+                    <FormInput
+                      label="Qty"
+                      required
+                      value={item.qty}
+                      onChangeText={(t) => updateItem(item.id, 'qty', t)}
+                      keyboardType="number-pad"
+                    />
                   </View>
                   <View style={styles.itemPriceInput}>
-                    <FormInput label="Unit Price" required value={item.unitPrice} onChangeText={(t) => updateItem(item.id, 'unitPrice', t)} keyboardType="decimal-pad" />
+                    <FormInput
+                      label="Unit Price"
+                      required
+                      value={item.unitPrice}
+                      onChangeText={(t) => updateItem(item.id, 'unitPrice', t)}
+                      keyboardType="decimal-pad"
+                    />
                   </View>
                 </View>
 
@@ -488,7 +379,17 @@ export default function CreateReceiptScreen() {
           </View>
         )}
 
-        <SelectField label="Ship To" value={shipTo} options={SHIP_TO_OPTIONS} onChange={setShipTo} />
+        <SelectField label="Ship To" value={shipToOption} options={SHIP_TO_OPTIONS} onChange={setShipToOption} />
+        {shipToOption === 'Enter Address' && (
+          <>
+            <View style={{ height: 12 }} />
+            <FormInput
+              label="Shipping Address"
+              value={shipToAddress}
+              onChangeText={setShipToAddress}
+            />
+          </>
+        )}
         <View style={{ height: 12 }} />
         <SelectField
           label="Payment Method"
@@ -497,19 +398,19 @@ export default function CreateReceiptScreen() {
           onChange={setPaymentMethod}
         />
 
-        <View style={styles.row}>
-          <View style={styles.rowInputSmall}>
-            <FormInput label="Tax (%)" value={taxPercent} onChangeText={setTaxPercent} keyboardType="decimal-pad" />
+        <View style={[styles.row, { marginTop: 10 }]}>
+          <View style={[styles.rowInputSmall, styles.vatLabelWrapper]}>
+            <Text style={styles.vatLabelText}>VAT (7.5%)</Text>
           </View>
-          <View style={[styles.input, styles.rowInputLarge, styles.totalDisplay, { height: 40}]}>
+          <View style={[styles.input, styles.rowInputLarge, styles.totalDisplay, { height: 40 }]}>
             <Text style={styles.totalDisplayText}>
-              {total > 0 ? `$${formattedTotal}` : 'Total'}
+              {total > 0 ? `₦${formattedTotal}` : 'Total'}
             </Text>
           </View>
         </View>
 
         <TouchableOpacity style={styles.createButton} onPress={handleSave}>
-          <Text style={styles.createButtonText}>CREATE</Text>
+          <Text style={styles.createButtonText}>{isEditMode ? 'SAVE CHANGES' : 'CREATE'}</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -520,7 +421,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.backgroundSecondary },
   content: { paddingBottom: 40 },
 
-  
   backText: { fontSize: 16, color: '#fff' },
 
   body: { padding: 16 },
@@ -531,21 +431,6 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: 8, marginBottom: 0 },
   rowInputSmall: { flex: 1 },
   rowInputLarge: { flex: 2 },
-
-  fieldWrapper: { position: 'relative', marginBottom: 12 },
-  overlayLabelRow: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    zIndex: 1,
-  },
-  overlayLabelText: { fontSize: 15, color: colors.textPrimary },
-  requiredAsterisk: { fontSize: 15, color: '#D32F2F', marginLeft: 2 },
 
   input: {
     backgroundColor: colors.backgroundSecondary,
@@ -559,11 +444,7 @@ const styles = StyleSheet.create({
   },
   inputMultiline: { minHeight: 44, textAlignVertical: 'top' },
 
-  selectInput: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
+  selectInput: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
 
   sectionHeader: {
     flexDirection: 'row',
@@ -593,14 +474,9 @@ const styles = StyleSheet.create({
     borderColor: colors.surface,
     padding: 10,
   },
-  itemCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
+  itemCardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
   itemIndex: { fontSize: 13, fontWeight: '600', color: colors.textPrimary },
-  itemRemoveButton: { padding: 2},
+  itemRemoveButton: { padding: 2 },
   itemRow: { flexDirection: 'row', gap: 6 },
   itemNameInput: { flex: 2 },
   itemQtyInput: { flex: 1 },
@@ -664,6 +540,9 @@ const styles = StyleSheet.create({
   totalDisplay: { justifyContent: 'center' },
   totalDisplayText: { fontSize: 17, color: colors.textPrimary, fontWeight: '600' },
 
+  vatLabelWrapper: { justifyContent: 'center', height: 40 },
+  vatLabelText: { fontSize: 15, fontWeight: '700', color: colors.textPrimary },
+
   createButton: {
     backgroundColor: ACTIVE,
     borderRadius: 3,
@@ -671,46 +550,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 16,
   },
-  createButtonText: { color: '#fff', fontWeight: '700', fontSize: 17   },
-
-  // ---- Calendar ----
-  calendarDropdown: {
-    position: 'absolute',
-    top: '100%',
-    left: 0,
-    marginTop: 4,
-    width: 320, // wider than the date field itself, matching the mock's overlap
-  },
-  calendarCard: {
-    backgroundColor: CALENDAR_BG,
-    borderRadius: 10,
-    padding: 12,
-  },
-  calendarHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-  calendarHeaderText: { color: '#fff', fontWeight: '700', fontSize: 14 },
-  calendarWeekRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
-  calendarWeekLabel: {
-    width: 36,
-    textAlign: 'center',
-    color: '#cfcfcf',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  calendarDayChip: {
-    width: 36,
-    height: 32,
-    borderRadius: 4,
-    backgroundColor: CALENDAR_CHIP_BG,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  calendarDayChipSelected: { backgroundColor: ACTIVE },
-  calendarDayText: { color: '#fff', fontSize: 13 },
-  calendarDayTextFaded: { color: CALENDAR_CHIP_FADED_TEXT },
-  calendarDayTextSelected: { color: '#fff', fontWeight: '700' },
+  createButtonText: { color: '#fff', fontWeight: '700', fontSize: 17 },
 });
